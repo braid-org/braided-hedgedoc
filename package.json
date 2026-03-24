@@ -52,6 +52,7 @@
     "turbo": "2.8.13"
   },
   "dependencies": {
-    "braid-http": "1.3.111"
+    "braid-http": "1.3.111",
+    "braid-text": "^0.3.23"
   }
 }

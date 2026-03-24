@@ -252,12 +252,17 @@ export class NotesController {
     (req.raw as any).already_buffered_body = req.body as Buffer;
     await this.braidService.getBraidText().serve(req.raw, res.raw, {
       key: alias,
-      put_cb: (key: string, val: string) => {
+      put_cb: async (key: string, val: string, {version}: any) => {
         // After a successful edit, save the content to HedgeDoc's DB
         // so it shows up in the HedgeDoc UI.
-        this.revisionsService.createRevision(noteId, val).catch((e) => {
+        try {
+          const braidVersion = JSON.stringify(version);
+          await this.revisionsService.createRevision(
+            noteId, val, false, undefined, undefined, braidVersion,
+          );
+        } catch (e) {
           this.logger.error(`Failed to save braid edit to DB: ${e}`, undefined, 'putNoteContent');
-        });
+        }
       },
     });
   }

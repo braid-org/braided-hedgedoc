@@ -15,11 +15,9 @@ export class BraidService implements OnModuleInit {
     this.logger.setContext(BraidService.name);
   }
 
-  onModuleInit(): void {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    this.braidText = require('braid-text');
+  async onModuleInit(): Promise<void> {
+    this.braidText = await import('braid-text');
     this.braidText.cors = false;
-    // Use braid-text's default file storage (./braid-text-db)
     this.logger.log('Braid-text initialized', 'onModuleInit');
   }
 
