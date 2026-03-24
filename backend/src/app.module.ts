@@ -13,6 +13,7 @@ import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod';
 import { join } from 'node:path';
 
 import { AliasModule } from './alias/alias.module';
+import { BraidModule } from './braid/braid.module';
 import { ApiTokenModule } from './api-token/api-token.module';
 import { CsrfGuard } from './api/private/csrf/csrf.guard';
 import { PrivateApiModule } from './api/private/private-api.module';
@@ -109,6 +110,7 @@ const routes: Routes = [
     EventEmitterModule.forRoot(eventModuleConfig),
     ScheduleModule.forRoot(),
     AliasModule,
+    BraidModule,
     UsersModule,
     RevisionsModule,
     PublicApiModule,

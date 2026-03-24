@@ -67,6 +67,19 @@ export async function setupApp(
       },
     );
 
+  // Register content-type parser for braid-http multi-patch requests.
+  // Captures raw bytes so braid-text can parse the Patches: N format.
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addContentTypeParser(
+      'message/http-patches',
+      { parseAs: 'buffer' },
+      (_req: unknown, body: unknown, done: (err: Error | null, body: unknown) => void) => {
+        done(null, body);
+      },
+    );
+
   await runMigrations(app as INestApplication, logger);
 
   // Setup session handling

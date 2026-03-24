@@ -28,6 +28,9 @@ export interface Revision {
   /** The stored Y.js state for realtime editing */
   [FieldNameRevision.yjsStateVector]: null | Buffer<ArrayBuffer>
 
+  /** The braid-text version array, JSON-serialized (e.g. '["alice-5","bob-12"]') */
+  [FieldNameRevision.braidVersion]: null | string
+
   /** Whether the note is a document or presentation at this revision */
   [FieldNameRevision.noteType]: NoteType
 
@@ -47,6 +50,7 @@ export enum FieldNameRevision {
   patch = 'patch',
   content = 'content',
   yjsStateVector = 'yjs_state_vector',
+  braidVersion = 'braid_version',
   noteType = 'note_type',
   title = 'title',
   description = 'description',

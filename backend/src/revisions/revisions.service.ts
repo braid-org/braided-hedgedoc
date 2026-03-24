@@ -326,6 +326,7 @@ export class RevisionsService {
     firstRevision: boolean = false,
     transaction?: Knex,
     yjsStateVector?: ArrayBuffer,
+    braidVersion?: string,
   ): Promise<void> {
     this.logger.debug(`Creating revision for note '${noteId}'`, 'createRevision');
     if (!transaction) {
@@ -336,11 +337,19 @@ export class RevisionsService {
           firstRevision,
           newTransaction,
           yjsStateVector,
+          braidVersion,
         );
       });
       return;
     }
-    await this.innerCreateRevision(noteId, newContent, firstRevision, transaction, yjsStateVector);
+    await this.innerCreateRevision(
+      noteId,
+      newContent,
+      firstRevision,
+      transaction,
+      yjsStateVector,
+      braidVersion,
+    );
   }
 
   /**
@@ -352,6 +361,7 @@ export class RevisionsService {
    * @param firstRevision Whether this is called for the first revision of a note
    * @param transaction The database transaction to use
    * @param yjsStateVector The yjs state vector that describes the new content
+   * @param braidVersion The braid-text version array, JSON-serialized
    */
   private async innerCreateRevision(
     noteId: number,
@@ -359,6 +369,7 @@ export class RevisionsService {
     firstRevision: boolean,
     transaction: Knex,
     yjsStateVector?: ArrayBuffer,
+    braidVersion?: string,
   ): Promise<void> {
     const latestRevision = firstRevision ? null : await this.getLatestRevision(noteId, transaction);
     const oldContent = latestRevision?.content;
@@ -382,6 +393,7 @@ export class RevisionsService {
         [FieldNameRevision.uuid]: newUuid,
         [FieldNameRevision.yjsStateVector]:
           yjsStateVector !== undefined ? Buffer.from(yjsStateVector) : null,
+        [FieldNameRevision.braidVersion]: braidVersion ?? null,
         [FieldNameRevision.createdAt]: dateTimeToDB(getCurrentDateTime()),
       },
       [FieldNameRevision.uuid],

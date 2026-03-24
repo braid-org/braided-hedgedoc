@@ -20,11 +20,15 @@ import {
   Param,
   Post,
   Put,
+  Req,
+  Res,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { FastifyReply, FastifyRequest } from 'fastify';
 import { ApiSecurity, ApiTags } from '@nestjs/swagger';
 
+import { BraidService } from '../../../braid/braid.service';
 import { MediaUploadDto } from '../../../dtos/media-upload.dto';
 import { NoteMetadataDto } from '../../../dtos/note-metadata.dto';
 import { NotePermissionsDto } from '../../../dtos/note-permissions.dto';
@@ -56,6 +60,7 @@ import { GetNoteIdInterceptor } from '../../utils/interceptors/get-note-id.inter
 export class NotesController {
   constructor(
     private readonly logger: ConsoleLoggerService,
+    private braidService: BraidService,
     private noteService: NoteService,
     private userService: UsersService,
     private groupService: GroupsService,
@@ -177,10 +182,69 @@ export class NotesController {
     404,
   )
   async getNoteContent(
+    @Req() req: FastifyRequest,
+    @Res() res: FastifyReply,
     @RequestUserId() userId: number,
     @RequestNoteId() noteId: number,
-  ): Promise<string> {
+  ): Promise<string | void> {
+
+    // This proof-of-concept stores text *both* in HedgeDoc's existing Note
+    // Service, *and* in the Braid-Text db.
+
+    // We dispatch to Braid-Text iff the client is doing something Braidly, with explicit
+    // Subscribe, Version, or Parents headers.
+    const h = req.raw.headers;
+    if (h['subscribe'] || h['version'] || h['parents']) {
+      res.hijack();
+      const alias = (req.params as { noteAlias: string }).noteAlias;
+      await this.braidService.getBraidText().serve(req.raw, res.raw, {
+        key: alias,
+      });
+      return;
+    }
+
+    // All other requests get the note content via HedgeDoc's normal API
     return await this.noteService.getNoteContent(noteId);
+  }
+
+  @UseInterceptors(GetNoteIdInterceptor)
+  @RequirePermission(PermissionLevel.WRITE)
+  @Put(':noteAlias/content')
+  @OpenApi(200, 403, 404)
+  async putNoteContent(
+    @Req() req: FastifyRequest,
+    @Res() res: FastifyReply,
+    @RequestNoteId() noteId: number,
+  ): Promise<void> {
+    const contentType = req.raw.headers['content-type'] || '';
+
+    // Sanity checks: let's constrain the type of mutations we accept
+    {
+      // First, verify client is PUTting to text/plain or markdown
+      if (!(contentType.includes('text/plain')
+            || contentType.includes('text/markdown')
+            // Or is explicitly sending us patches
+            || req.raw.headers['patches'])) {
+        res.status(415).send('Content must be text/plain, text/markdown,'
+                             + ' or have Patches: N');
+        return;
+      }
+
+      // Second, let's only accept edits from clients that know the version
+      // they are editing
+      if (!req.raw.headers['version'] || !req.raw.headers['parents']) {
+        res.status(400).send('No Version and Parents headers');
+        return;
+      }
+    }
+
+    // Hand off to braid-text with pre-buffered body
+    res.hijack();
+    const alias = (req.params as { noteAlias: string }).noteAlias;
+    (req.raw as any).already_buffered_body = req.body as Buffer;
+    await this.braidService.getBraidText().serve(req.raw, res.raw, {
+      key: alias,
+    });
   }
 
   @UseInterceptors(GetNoteIdInterceptor)
@@ -393,4 +457,5 @@ export class NotesController {
     const mediaUuids = await this.mediaService.getMediaUploadUuidsByNoteId(noteId);
     return await this.mediaService.getMediaUploadDtosByUuids(mediaUuids);
   }
+
 }

@@ -6,6 +6,7 @@
 import { Module } from '@nestjs/common';
 
 import { AliasModule } from '../../alias/alias.module';
+import { BraidModule } from '../../braid/braid.module';
 import { ApiTokenModule } from '../../api-token/api-token.module';
 import { GroupsModule } from '../../groups/groups.module';
 import { MediaModule } from '../../media/media.module';
@@ -23,6 +24,7 @@ import { NotesController } from './notes/notes.controller';
 @Module({
   imports: [
     ApiTokenModule,
+    BraidModule,
     GroupsModule,
     UsersModule,
     AliasModule,
