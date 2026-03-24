@@ -7395,6 +7395,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"braid-http@npm:1.3.111":
+  version: 1.3.111
+  resolution: "braid-http@npm:1.3.111"
+  dependencies:
+    parse-headers: "npm:^2.0.3"
+  checksum: 10c0/a8ecb0f40c4b7b6f931d3eb58c03fc62d406f7fa2ba14fffe12e2e4294146ece9077aef3c37a7c726e334c8c57861d086b9a40f34dc819595e18e6555bdb71f2
+  languageName: node
+  linkType: hard
+
 "braid-http@npm:^1.3.106":
   version: 1.3.109
   resolution: "braid-http@npm:1.3.109"
@@ -11004,6 +11013,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "hedgedoc@workspace:."
   dependencies:
+    braid-http: "npm:1.3.111"
     dotenv-cli: "npm:11.0.0"
     oxfmt: "npm:0.23.0"
     oxlint: "npm:1.38.0"

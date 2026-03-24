@@ -145,6 +145,24 @@ export async function setupApp(
   // TODO Evaluate whether we really need this folder,
   //  only use-cases for now are intro.md and motd.md which could be API endpoints as well
 
+  // == Install the Braid HTTP extensions at the root of Fastify ==
+  //
+  // The Braid HTTP extensions upgrade the fundamentals of HTTP, and need to
+  // be installed at the root of HTTP request handling.
+  //
+  // To do that, we grab the HTTP server...
+  const server = app.getHttpAdapter().getInstance().server,
+        // ...remember each of its listeners
+        listeners = server.listeners('request'),
+        // ...and get our braidifier ready.
+        { http_server: braidify } = await import('braid-http')
+  // Then we detach each listener temporarily...
+  server.removeAllListeners('request');
+  for (const listener of listeners)
+    // ...and replace it with a braidified wrapper of itself.
+    server.on('request', braidify(listener as (...args: any[]) => void));
+  // Now we're braidified!
+
   // Configure WebSocket and error message handling
   const { httpAdapter } = app.get(HttpAdapterHost);
   app.useGlobalFilters(new ErrorExceptionMapping(logger, httpAdapter));
