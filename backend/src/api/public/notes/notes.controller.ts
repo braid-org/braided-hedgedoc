@@ -183,7 +183,7 @@ export class NotesController {
   )
   async getNoteContent(
     @Req() req: FastifyRequest,
-    @Res() res: FastifyReply,
+    @Res({ passthrough: true }) res: FastifyReply,
     @RequestUserId() userId: number,
     @RequestNoteId() noteId: number,
   ): Promise<string | void> {
@@ -191,10 +191,11 @@ export class NotesController {
     // This proof-of-concept stores text *both* in HedgeDoc's existing Note
     // Service, *and* in the Braid-Text db.
 
-    // We dispatch to Braid-Text iff the client is doing something Braidly, with explicit
-    // Subscribe, Version, or Parents headers.
+    // We dispatch to Braid-Text iff the client is doing something Braidly,
+    // with explicit Version, Parents, Subscribe, or Merge-Type headers.
     const h = req.raw.headers;
-    if (h['subscribe'] || h['version'] || h['parents']) {
+    if ('version' in h || 'parents' in h
+        || 'subscribe' in h || 'merge-type' in h) {
       res.hijack();
       const alias = (req.params as { noteAlias: string }).noteAlias;
       await this.braidService.getBraidText().serve(req.raw, res.raw, {
@@ -218,13 +219,15 @@ export class NotesController {
   ): Promise<void> {
     const contentType = req.raw.headers['content-type'] || '';
 
-    // Sanity checks: let's constrain the type of mutations we accept
+    // All PUTs currently go to Braid-Text.
+
+    // To stay sane, let's constrain the type of mutations we accept
     {
       // First, verify client is PUTting to text/plain or markdown
       if (!(contentType.includes('text/plain')
             || contentType.includes('text/markdown')
             // Or is explicitly sending us patches
-            || req.raw.headers['patches'])) {
+            || 'patches' in req.raw.headers)) {
         res.status(415).send('Content must be text/plain, text/markdown,'
                              + ' or have Patches: N');
         return;
@@ -232,8 +235,8 @@ export class NotesController {
 
       // Second, let's only accept edits from clients that know the version
       // they are editing
-      if (!req.raw.headers['version'] || !req.raw.headers['parents']) {
-        res.status(400).send('No Version and Parents headers');
+      if (!('version' in req.raw.headers) || !('parents' in req.raw.headers)) {
+        res.status(400).send('Missing Version and/or Parents headers');
         return;
       }
     }

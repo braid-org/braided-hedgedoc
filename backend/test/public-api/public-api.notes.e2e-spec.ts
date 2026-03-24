@@ -1083,4 +1083,65 @@ describe('Notes', () => {
         .expect(403);
     });
   });
+
+  describe(`Braid-Text ${PUBLIC_API_PREFIX}/notes/{:noteAlias}/content`, () => {
+    it('normal GET without braid headers returns HedgeDoc content', async () => {
+      const response = await agent
+        .get(`${PUBLIC_API_PREFIX}/notes/${noteAlias1}/content`)
+        .set('Authorization', `Bearer ${testSetup.authTokens[0].secret}`)
+        .expect(200);
+      expect(response.text).toEqual(noteContent1);
+    });
+
+    it('braid PUT stores content and braid GET retrieves it', async () => {
+      // PUT content via braid
+      await agent
+        .put(`${PUBLIC_API_PREFIX}/notes/${noteAlias1}/content`)
+        .set('Authorization', `Bearer ${testSetup.authTokens[0].secret}`)
+        .set('Version', '"braid-test-1"')
+        .set('Parents', '')
+        .set('Content-Type', 'text/plain')
+        .send('Hello from braid')
+        .expect(200);
+
+      // GET current state via braid (Merge-Type triggers braid path,
+      // no Version/Parents means "give me the latest")
+      const response = await agent
+        .get(`${PUBLIC_API_PREFIX}/notes/${noteAlias1}/content`)
+        .set('Authorization', `Bearer ${testSetup.authTokens[0].secret}`)
+        .set('Merge-Type', 'simpleton')
+        .expect(200);
+      expect(response.text).toContain('Hello from braid');
+    });
+
+    it('braid PUT without Version header returns 400', async () => {
+      await agent
+        .put(`${PUBLIC_API_PREFIX}/notes/${noteAlias1}/content`)
+        .set('Authorization', `Bearer ${testSetup.authTokens[0].secret}`)
+        .set('Content-Type', 'text/plain')
+        .send('no version')
+        .expect(400);
+    });
+
+    it('braid PUT with wrong content-type returns 415', async () => {
+      await agent
+        .put(`${PUBLIC_API_PREFIX}/notes/${noteAlias1}/content`)
+        .set('Authorization', `Bearer ${testSetup.authTokens[0].secret}`)
+        .set('Version', '"test-1"')
+        .set('Parents', '')
+        .set('Content-Type', 'application/json')
+        .send('{"bad": true}')
+        .expect(415);
+    });
+
+    it('braid PUT without auth returns 403', async () => {
+      await agent
+        .put(`${PUBLIC_API_PREFIX}/notes/${noteAlias1}/content`)
+        .set('Version', '"test-1"')
+        .set('Parents', '')
+        .set('Content-Type', 'text/plain')
+        .send('no auth')
+        .expect(403);
+    });
+  });
 });
