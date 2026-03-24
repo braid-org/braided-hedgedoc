@@ -13,6 +13,15 @@ interface RateLimitConfig {
   window?: number;
 }
 
+// We skip rate-limiting for text edit PUTs from clients that have made a
+// successful authenticated edit, to emulate how WebSocket messages aren't
+// rate-limited.
+export const unlimitedEditors = new Set<string>();
+
+// The set of unlimitedEditors is cleared every 10 minutes.
+// Active editors will be made unlimited again on their next successful PUT.
+setInterval(() => unlimitedEditors.clear(), 10 * 60 * 1000);
+
 /**
  * Extracts the user ID from the session if present.
  *

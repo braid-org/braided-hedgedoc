@@ -29,6 +29,7 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { ApiSecurity, ApiTags } from '@nestjs/swagger';
 
 import { BraidService } from '../../../braid/braid.service';
+import { generateRateLimitKey, unlimitedEditors } from '../../../security/rate-limiting';
 import { MediaUploadDto } from '../../../dtos/media-upload.dto';
 import { NoteMetadataDto } from '../../../dtos/note-metadata.dto';
 import { NotePermissionsDto } from '../../../dtos/note-permissions.dto';
@@ -240,6 +241,10 @@ export class NotesController {
         return;
       }
     }
+
+    // Since this edit is valid, let's remove rate-limiting for this client's
+    // future PUTs (until the unlimitedEditors timeout).
+    unlimitedEditors.add(generateRateLimitKey(req));
 
     // Hand off to braid-text with pre-buffered body
     res.hijack();

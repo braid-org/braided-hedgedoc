@@ -29,6 +29,7 @@ import {
   generateRateLimitKey,
   getMaxLimitByRequestWithSecurityConfig,
   getTimeWindowByRequestWithSecurityConfig,
+  unlimitedEditors,
 } from './security/rate-limiting';
 
 /**
@@ -107,7 +108,19 @@ export async function setupApp(
     max: getMaxLimitByRequestWithSecurityConfig(securityConfig),
     timeWindow: getTimeWindowByRequestWithSecurityConfig(securityConfig),
     errorResponseBuilder: buildRateLimitResponse,
-    allowList: securityConfig.rateLimit.bypass,
+    allowList: (req: import('fastify').FastifyRequest, key: string) => {
+      // Skip rate-limiting for valid clients making text-edit PUTs,
+      // similar to how WebSocket messages aren't rate-limited.
+      if (req.method === 'PUT'
+          && unlimitedEditors.has(generateRateLimitKey(req))) {
+        const type = req.headers['content-type'] || '';
+        if (type.includes('text/plain') || type.includes('text/markdown'))
+          return true;
+      }
+
+      // Otherwise, default to the securityConfig.
+      return securityConfig.rateLimit.bypass.includes(key);
+    },
     enableDraftSpec: true,
   });
   logger.log('Rate limiting enabled', 'AppBootstrap');
