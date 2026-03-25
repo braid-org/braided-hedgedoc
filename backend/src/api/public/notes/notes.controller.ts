@@ -192,11 +192,13 @@ export class NotesController {
     // This proof-of-concept stores text *both* in HedgeDoc's existing Note
     // Service, *and* in the Braid-Text db.
 
-    // We dispatch to Braid-Text iff the client is doing something Braidly,
-    // with explicit Version, Parents, Subscribe, or Merge-Type headers.
+    // We dispatch to Braid-Text iff the client is doing something Braidly:
+    // braid protocol headers, or requesting cursor data.
     const h = req.raw.headers;
+    const accept = (h['accept'] || '') as string;
     if ('version' in h || 'parents' in h
-        || 'subscribe' in h || 'merge-type' in h) {
+        || 'subscribe' in h || 'merge-type' in h
+        || accept.includes('application/text-cursors+json')) {
       res.hijack();
       const alias = (req.params as { noteAlias: string }).noteAlias;
       await this.braidService.getBraidText().serve(req.raw, res.raw, {
@@ -218,32 +220,33 @@ export class NotesController {
     @Res() res: FastifyReply,
     @RequestNoteId() noteId: number,
   ): Promise<void> {
-    const contentType = req.raw.headers['content-type'] || '';
+    const contentType = (req.raw.headers['content-type'] || '') as string;
 
     // All PUTs currently go to Braid-Text.
 
-    // To stay sane, let's constrain the type of mutations we accept
+    // To stay sane, let's constrain the types of mutations we allow
     {
-      // First, verify client is PUTting to text/plain or markdown
+
+      // First, verify client is PUTting text/plain, markdown, or patches
       if (!(contentType.includes('text/plain')
             || contentType.includes('text/markdown')
-            // Or is explicitly sending us patches
+            || contentType.includes('application/text-cursors+json')
             || 'patches' in req.raw.headers)) {
         res.status(415).send('Content must be text/plain, text/markdown,'
                              + ' or have Patches: N');
         return;
       }
 
-      // Second, let's only accept edits from clients that know the version
-      // they are editing
-      if (!('version' in req.raw.headers) || !('parents' in req.raw.headers)) {
+      // Second, only accept text edits from clients that know their version
+      if ((!('version' in req.raw.headers) || !('parents' in req.raw.headers))
+          // But cursor updates don't need version or parents.
+          && !contentType.includes('application/text-cursors+json')) {
         res.status(400).send('Missing Version and/or Parents headers');
         return;
       }
     }
 
-    // Since this edit is valid, let's remove rate-limiting for this client's
-    // future PUTs (until the unlimitedEditors timeout).
+    // Since this edit is valid, remove rate-limiting for this client's future PUTs
     unlimitedEditors.add(generateRateLimitKey(req));
 
     // Hand off to braid-text with pre-buffered body

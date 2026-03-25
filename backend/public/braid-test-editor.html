@@ -5,7 +5,7 @@
   <style>
     body { font-family: sans-serif; margin: 1em; }
     .editors { display: flex; gap: 1em; }
-    .editor-pane { flex: 1; }
+    .editor-pane { flex: 1; position: relative; }
     .editor-pane textarea { width: 100%; height: 400px; font-family: monospace; font-size: 14px; box-sizing: border-box; }
     .editor-pane h3 { margin: 0 0 0.5em 0; }
     .status { font-family: monospace; font-size: 11px; color: #666; margin-top: 0.3em; }
@@ -17,12 +17,12 @@
   <div class="editors">
     <div class="editor-pane">
       <h3>Client A</h3>
-      <textarea id="editorA"></textarea>
+      <textarea id="editorA" disabled></textarea>
       <div class="status" id="statusA">Connecting...</div>
     </div>
     <div class="editor-pane">
       <h3>Client B</h3>
-      <textarea id="editorB"></textarea>
+      <textarea id="editorB" disabled></textarea>
       <div class="status" id="statusB">Connecting...</div>
     </div>
   </div>
@@ -30,7 +30,10 @@
   <!-- Braid dependencies -->
   <script src="https://braid.org/code/myers-diff1.js"></script>
   <script src="https://unpkg.com/braid-http@~1.3/braid-http-client.js"></script>
+  <script src="/public/web-utils.js"></script>
   <script src="/public/simpleton-sync.js"></script>
+  <script src="/public/textarea-highlights.js"></script>
+  <script src="/public/cursor-sync.js"></script>
 
   <script>
     var params = new URLSearchParams(location.search)
@@ -40,7 +43,7 @@
 
     document.title = 'Braid Test: ' + alias
 
-    function connectEditor(editorId, statusId, peerName) {
+    function connectEditor(editorId, statusId) {
       var editor = document.getElementById(editorId)
       var status = document.getElementById(statusId)
 
@@ -49,27 +52,48 @@
         return
       }
 
-      var sync = simpleton_client(url, {
-        get_state: () => editor.value,
-        on_state: (state) => { editor.value = state },
-        headers: {
-          'Authorization': 'Bearer ' + token,
-          'Peer': peerName
-        },
-        content_type: 'text/plain',
-        on_error: (e) => {
-          status.textContent = 'Error: ' + e
-          console.error(peerName + ' error:', e)
-        }
+      // Set up cursor sync and rendering
+      var cursors = cursor_highlights(editor, url, {
+        headers: { 'Authorization': 'Bearer ' + token }
       })
 
-      editor.addEventListener('input', () => sync.changed())
-      status.textContent = 'Connected as ' + peerName + ' to ' + url
+      var sync = simpleton_client(url, {
+        headers: { 'Authorization': 'Bearer ' + token },
+        content_type: 'text/plain',
+
+        on_online: (online) => {
+          status.textContent = online ? 'Connected' : 'Reconnecting...'
+          online ? cursors.online() : cursors.offline()
+        },
+
+        // Use on_patches for incremental updates (needed for cursor tracking)
+        on_patches: (patches) => {
+          editor.disabled = false
+          apply_patches_and_update_selection(editor, patches)
+          cursors.on_patches(patches)
+        },
+
+        get_patches: (prev_state) => diff(prev_state, editor.value),
+        get_state: () => editor.value,
+
+        on_error: (e) => {
+          set_error_state(editor)
+          status.textContent = 'Error: ' + e
+          console.error(editorId + ' error:', e)
+        },
+        on_ack: () => set_acked_state(editor)
+      })
+
+      editor.oninput = () => {
+        set_acked_state(editor, false)
+        cursors.on_edit(sync.changed())
+      }
+
+      status.textContent = 'Connecting to ' + url + '...'
     }
 
-    // Connect both editors with different peer IDs
-    connectEditor('editorA', 'statusA', 'client-a')
-    connectEditor('editorB', 'statusB', 'client-b')
+    connectEditor('editorA', 'statusA')
+    connectEditor('editorB', 'statusB')
   </script>
 </body>
 </html>

@@ -68,18 +68,20 @@ export async function setupApp(
       },
     );
 
-  // Register content-type parser for braid-http multi-patch requests.
-  // Captures raw bytes so braid-text can parse the Patches: N format.
-  app
-    .getHttpAdapter()
-    .getInstance()
-    .addContentTypeParser(
-      'message/http-patches',
-      { parseAs: 'buffer' },
-      (_req: unknown, body: unknown, done: (err: Error | null, body: unknown) => void) => {
-        done(null, body);
-      },
-    );
+  // Register content-type parsers for braid request types.
+  // These capture raw bytes so braid-text can parse them itself.
+  for (const type of ['message/http-patches', 'application/text-cursors+json']) {
+    app
+      .getHttpAdapter()
+      .getInstance()
+      .addContentTypeParser(
+        type,
+        { parseAs: 'buffer' },
+        (_req: unknown, body: unknown, done: (err: Error | null, body: unknown) => void) => {
+          done(null, body);
+        },
+      );
+  }
 
   await runMigrations(app as INestApplication, logger);
 
@@ -114,7 +116,8 @@ export async function setupApp(
       if (req.method === 'PUT'
           && unlimitedEditors.has(generateRateLimitKey(req))) {
         const type = req.headers['content-type'] || '';
-        if (type.includes('text/plain') || type.includes('text/markdown'))
+        if (type.includes('text/plain') || type.includes('text/markdown')
+            || type.includes('application/text-cursors+json'))
           return true;
       }
 
@@ -155,6 +158,7 @@ export async function setupApp(
     prefix: '/public/',
     decorateReply: false,
   });
+
   // TODO Evaluate whether we really need this folder,
   //  only use-cases for now are intro.md and motd.md which could be API endpoints as well
 

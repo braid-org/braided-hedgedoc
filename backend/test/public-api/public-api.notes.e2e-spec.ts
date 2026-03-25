@@ -1143,5 +1143,50 @@ describe('Notes', () => {
         .send('no auth')
         .expect(403);
     });
+
+    it('cursor HEAD returns application/text-cursors+json', async () => {
+      const response = await agent
+        .head(`${PUBLIC_API_PREFIX}/notes/${noteAlias1}/content`)
+        .set('Authorization', `Bearer ${testSetup.authTokens[0].secret}`)
+        .set('Accept', 'application/text-cursors+json')
+        .expect(200);
+      expect(response.headers['content-type']).toContain('application/text-cursors+json');
+    });
+
+    it('cursor GET returns cursor snapshot', async () => {
+      const response = await agent
+        .get(`${PUBLIC_API_PREFIX}/notes/${noteAlias1}/content`)
+        .set('Authorization', `Bearer ${testSetup.authTokens[0].secret}`)
+        .set('Accept', 'application/text-cursors+json')
+        .expect(200);
+      expect(JSON.parse(response.text)).toEqual({});
+    });
+
+    it('cursor PUT without auth returns 403', async () => {
+      await agent
+        .put(`${PUBLIC_API_PREFIX}/notes/${noteAlias1}/content`)
+        .set('Content-Type', 'application/text-cursors+json')
+        .set('Peer', 'test-peer')
+        .set('Content-Range', 'json ["test-peer"]')
+        .send('[[0, 3]]')
+        .expect(403);
+    });
+
+    it('cursor PUT without subscription returns 425', async () => {
+      const response = await agent
+        .put(`${PUBLIC_API_PREFIX}/notes/${noteAlias1}/content`)
+        .set('Authorization', `Bearer ${testSetup.authTokens[0].secret}`)
+        .set('Content-Type', 'application/text-cursors+json')
+        .set('Peer', 'test-peer')
+        .set('Content-Range', 'json ["test-peer"]')
+        .send('[[0, 3]]')
+        .buffer(true)
+        .parse((res: any, cb: any) => {
+          let data = '';
+          res.on('data', (chunk: any) => { data += chunk; });
+          res.on('end', () => cb(null, data));
+        });
+      expect(response.status).toBe(425);
+    });
   });
 });

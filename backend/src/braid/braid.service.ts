@@ -16,7 +16,7 @@ export class BraidService implements OnModuleInit {
   }
 
   async onModuleInit(): Promise<void> {
-    this.braidText = await import('braid-text');
+    this.braidText = (await import('braid-text')).default;
     this.braidText.cors = false;
     this.logger.log('Braid-text initialized', 'onModuleInit');
   }
