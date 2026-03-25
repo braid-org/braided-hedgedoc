@@ -40,7 +40,7 @@ export class ApiTokensController {
   @OpenApi(201)
   async postTokenRequest(
     @Body() createDto: ApiTokenCreateDto,
-    @RequestUserId({ forbidGuests: true }) userId: User[FieldNameUser.id],
+    @RequestUserId() userId: User[FieldNameUser.id],
   ): Promise<ApiTokenWithSecretDto> {
     let validUntil: DateTime | undefined = undefined;
     if (createDto.validUntil !== undefined) {

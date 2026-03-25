@@ -36,6 +36,30 @@ export default async function RootLayout({ children, appBar }: RootLayoutProps) 
     <html lang='en'>
       <head>
         <link color='#b51f08' href='/icons/safari-pinned-tab.svg' rel='mask-icon' />
+        <script dangerouslySetInnerHTML={{__html: `
+          // Get or create a Bearer token for the Braid public API.
+          // Run in console: console.log(JSON.stringify(await get_api_token()))
+          async function get_api_token() {
+            var token = localStorage.getItem('hedgedoc-api-token')
+            if (!token) {
+              var csrf = await fetch('/api/private/csrf/token').then(r => r.json())
+              var result = await fetch('/api/private/tokens', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'csrf-token': csrf.token},
+                body: JSON.stringify({label: 'braid-editor', validUntil: '2027-01-01T00:00:00.000Z'})
+              }).then(r => r.json())
+              token = result.secret
+              localStorage.setItem('hedgedoc-api-token', token)
+            }
+            return token
+          }
+
+          // Get the full Authorization header for external editors.
+          // Run in console: console.log(JSON.stringify(await get_auth_header()))
+          async function get_auth_header() {
+            return {Authorization: 'Bearer ' + await get_api_token()}
+          }
+        `}} />
       </head>
       <body>
         <ExpectedOriginBoundary expectedOrigin={baseUrls.editor}>
