@@ -13,6 +13,7 @@ import { MediaModule } from '../../media/media.module';
 import { MonitoringModule } from '../../monitoring/monitoring.module';
 import { NoteModule } from '../../notes/note.module';
 import { PermissionsModule } from '../../permissions/permissions.module';
+import { RealtimeNoteModule } from '../../realtime/realtime-note/realtime-note.module';
 import { RevisionsModule } from '../../revisions/revisions.module';
 import { UsersModule } from '../../users/users.module';
 import { AliasController } from './alias/alias.controller';
@@ -33,6 +34,7 @@ import { NotesController } from './notes/notes.controller';
     MediaModule,
     PermissionsModule,
     NoteModule,
+    RealtimeNoteModule,
   ],
   controllers: [
     AliasController,

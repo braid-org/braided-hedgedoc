@@ -6,10 +6,11 @@
 import { Module } from '@nestjs/common';
 
 import { LoggerModule } from '../logger/logger.module';
+import { RevisionsModule } from '../revisions/revisions.module';
 import { BraidService } from './braid.service';
 
 @Module({
-  imports: [LoggerModule],
+  imports: [LoggerModule, RevisionsModule],
   providers: [BraidService],
   exports: [BraidService],
 })

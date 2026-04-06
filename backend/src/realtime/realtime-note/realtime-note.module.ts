@@ -6,6 +6,7 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 
+import { BraidModule } from '../../braid/braid.module';
 import { PermissionsModule } from '../../permissions/permissions.module';
 import { RevisionsModule } from '../../revisions/revisions.module';
 import { SessionModule } from '../../sessions/session.module';
@@ -20,6 +21,7 @@ import { RealtimeNoteService } from './realtime-note.service';
     SessionModule,
     RevisionsModule,
     ScheduleModule.forRoot(),
+    BraidModule,
   ],
   exports: [RealtimeNoteService, RealtimeNoteStore],
   providers: [RealtimeNoteService, RealtimeNoteStore],

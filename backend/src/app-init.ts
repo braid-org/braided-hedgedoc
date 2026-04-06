@@ -187,4 +187,11 @@ export async function setupApp(
 
   // Enable hooks on app shutdown, like saving notes into the database
   app.enableShutdownHooks();
+
+  // Don't let idle keep-alive connections prevent shutdown.
+  const origClose = server.close.bind(server);
+  server.close = function(cb?: () => void) {
+    server.closeAllConnections();
+    return origClose(cb);
+  };
 }

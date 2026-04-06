@@ -29,6 +29,7 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { ApiSecurity, ApiTags } from '@nestjs/swagger';
 
 import { BraidService } from '../../../braid/braid.service';
+import { RealtimeNoteService } from '../../../realtime/realtime-note/realtime-note.service';
 import { generateRateLimitKey, unlimitedEditors } from '../../../security/rate-limiting';
 import { MediaUploadDto } from '../../../dtos/media-upload.dto';
 import { NoteMetadataDto } from '../../../dtos/note-metadata.dto';
@@ -62,6 +63,7 @@ export class NotesController {
   constructor(
     private readonly logger: ConsoleLoggerService,
     private braidService: BraidService,
+    private realtimeNoteService: RealtimeNoteService,
     private noteService: NoteService,
     private userService: UsersService,
     private groupService: GroupsService,
@@ -199,10 +201,11 @@ export class NotesController {
     if ('version' in h || 'parents' in h
         || 'subscribe' in h || 'merge-type' in h
         || accept.includes('application/text-cursors+json')) {
+      // Ensure the realtime note + braid resource exist before serving
+      await this.realtimeNoteService.getOrCreateRealtimeNote(noteId);
       res.hijack();
-      const alias = (req.params as { noteAlias: string }).noteAlias;
       await this.braidService.getBraidText().serve(req.raw, res.raw, {
-        key: alias,
+        key: noteId.toString(),
       });
       return;
     }
@@ -249,24 +252,12 @@ export class NotesController {
     // Since this edit is valid, remove rate-limiting for this client's future PUTs
     unlimitedEditors.add(generateRateLimitKey(req));
 
-    // Hand off to braid-text with pre-buffered body
+    // Ensure the realtime note + braid resource exist before serving
+    await this.realtimeNoteService.getOrCreateRealtimeNote(noteId);
     res.hijack();
-    const alias = (req.params as { noteAlias: string }).noteAlias;
     (req.raw as any).already_buffered_body = req.body as Buffer;
     await this.braidService.getBraidText().serve(req.raw, res.raw, {
-      key: alias,
-      put_cb: async (key: string, val: string, {version}: any) => {
-        // After a successful edit, save the content to HedgeDoc's DB
-        // so it shows up in the HedgeDoc UI.
-        try {
-          const braidVersion = JSON.stringify(version);
-          await this.revisionsService.createRevision(
-            noteId, val, false, undefined, undefined, braidVersion,
-          );
-        } catch (e) {
-          this.logger.error(`Failed to save braid edit to DB: ${e}`, undefined, 'putNoteContent');
-        }
-      },
+      key: noteId.toString(),
     });
   }
 

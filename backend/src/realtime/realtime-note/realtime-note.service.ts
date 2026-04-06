@@ -10,6 +10,7 @@ import { BeforeApplicationShutdown, Inject, Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { SchedulerRegistry } from '@nestjs/schedule';
 
+import { BraidService } from '../../braid/braid.service';
 import noteConfiguration, { NoteConfig } from '../../config/note.config';
 import { NoteEvent } from '../../events';
 import { ConsoleLoggerService } from '../../logger/console-logger.service';
@@ -29,6 +30,7 @@ export class RealtimeNoteService implements BeforeApplicationShutdown {
     @Inject(noteConfiguration.KEY)
     private noteConfig: NoteConfig,
     private permissionService: PermissionService,
+    private braidService: BraidService,
   ) {}
 
   /**
@@ -45,20 +47,34 @@ export class RealtimeNoteService implements BeforeApplicationShutdown {
    * @param realtimeNote The realtime note for which a revision should be created
    */
   public saveRealtimeNote(realtimeNote: RealtimeNote): void {
+    const wsDocText = realtimeNote.getRealtimeDoc().getCurrentContent();
     const encodedStateUpdate = realtimeNote.getRealtimeDoc().encodeStateAsUpdate();
     const encodedStateUpdateBytes = new Uint8Array(encodedStateUpdate);
-    this.revisionsService
-      .createRevision(
-        realtimeNote.getNoteId(),
+    console.log(`[saveRealtimeNote] note ${realtimeNote.getNoteId()}: ws Y.Doc text="${wsDocText.slice(0, 50)}" (${wsDocText.length} chars), yjs state size=${encodedStateUpdateBytes.length}`);
+
+    // Get braid version if available
+    const noteId = realtimeNote.getNoteId();
+    const braidText = this.braidService.getBraidText();
+    const braidResource = braidText?.cache[noteId.toString()];
+
+    const saveFn = async () => {
+      const resource = braidResource ? await braidResource : null;
+      const braidVersion = resource?.version?.length
+        ? JSON.stringify(resource.version)
+        : undefined;
+
+      await this.revisionsService.createRevision(
+        noteId,
         realtimeNote.getRealtimeDoc().getCurrentContent(),
         false,
         undefined,
         encodedStateUpdateBytes.buffer,
-      )
-      .then(() => {
-        realtimeNote.announceMetadataUpdate();
-      })
-      .catch((reason) => this.logger.error(reason));
+        braidVersion,
+      );
+      realtimeNote.announceMetadataUpdate();
+    };
+
+    saveFn().catch((reason) => this.logger.error(reason));
   }
 
   /**
@@ -91,6 +107,66 @@ export class RealtimeNoteService implements BeforeApplicationShutdown {
       this.saveRealtimeNote(realtimeNote);
     });
     this.startPersistTimer(realtimeNote);
+
+    // Initialize braid-text resource from the same DB state
+    await this.braidService.initBraidResource(noteId);
+
+    // Set up two-way sync between hedgedoc's Y.Doc and braid-text
+    const braidText = this.braidService.getBraidText();
+    const key = noteId.toString();
+    const realtimeDoc = realtimeNote.getRealtimeDoc();
+
+    // WS → braid-text: when the ws-side Y.Doc gets an edit (from websocket clients),
+    // forward the Yjs update to braid-text
+    const wsUpdateHandler = (update: number[], origin: unknown) => {
+      if (origin === 'braid-http') {
+        console.log(`[ws→braid-text] note ${noteId}: skipping echo (origin=braid-http)`);
+        return;
+      }
+      console.log(`[ws→braid-text] note ${noteId}: forwarding update size=${update.length} origin=${origin}`);
+      braidText.put(key, {
+        yjs_update: new Uint8Array(update),
+        peer: 'ws',
+      }).catch((e: Error) => {
+        this.logger.error(`ws→braid-text failed for note ${noteId}: ${e.message}`);
+      });
+    };
+    realtimeDoc.on('update', wsUpdateHandler);
+
+    // Braid-text → WS: subscribe to braid-text for yjs-text updates,
+    // convert and apply to the ws-side Y.Doc
+    const resource = await braidText.get_resource(key);
+    console.log(`[braid-text→ws] note ${noteId}: subscribing with parents=${JSON.stringify(resource.version)}`);
+    const ac = new AbortController();
+    braidText.get(resource, {
+      range_unit: 'yjs-text',
+      peer: 'ws',
+      parents: resource.version,  // DT version space — skip history, live updates only
+      signal: ac.signal,
+      subscribe: (update: any) => {
+        console.log(`[braid-text→ws] note ${noteId}: received update, patches=${update.patches?.length}, body=${update.body?.slice(0, 30)}`);
+        if (update.patches) {
+          try {
+            // NOTE: patches[].version is in Yjs version space (clientID-clock)
+            console.log(`[braid-text→ws] note ${noteId}: converting ${update.patches.length} patches to yjs binary`);
+            const binary = braidText.to_yjs_binary(update.patches);
+            if (binary) {
+              console.log(`[braid-text→ws] note ${noteId}: applying binary size=${binary.length} to ws Y.Doc`);
+              realtimeDoc.applyUpdate(Array.from(binary), 'braid-http');
+            }
+          } catch (e: any) {
+            this.logger.error(`braid-text→ws failed for note ${noteId}: ${e.message}`);
+          }
+        }
+      },
+    });
+
+    // Clean up on destruction
+    realtimeNote.on('destroy', () => {
+      realtimeDoc.off('update', wsUpdateHandler);
+      ac.abort();
+    });
+
     return realtimeNote;
   }
 
