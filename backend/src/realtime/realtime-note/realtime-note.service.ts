@@ -147,9 +147,8 @@ export class RealtimeNoteService implements BeforeApplicationShutdown {
         console.log(`[braid-text→ws] note ${noteId}: received update, patches=${update.patches?.length}, body=${update.body?.slice(0, 30)}`);
         if (update.patches) {
           try {
-            // NOTE: patches[].version is in Yjs version space (clientID-clock)
             console.log(`[braid-text→ws] note ${noteId}: converting ${update.patches.length} patches to yjs binary`);
-            const binary = braidText.to_yjs_binary(update.patches);
+            const binary = braidText.to_yjs_binary([update]);
             if (binary) {
               console.log(`[braid-text→ws] note ${noteId}: applying binary size=${binary.length} to ws Y.Doc`);
               realtimeDoc.applyUpdate(Array.from(binary), 'braid-http');
