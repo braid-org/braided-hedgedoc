@@ -12,9 +12,24 @@ log {
 	format console
 }
 
+# WebSockets go to the backend:
 reverse_proxy /realtime http://backend:3000
+
+# API requests all go to the backend:
 reverse_proxy /api/* http://backend:3000
 reverse_proxy /public/* http://backend:3000
 reverse_proxy /uploads/* http://backend:3000
 reverse_proxy /apidoc/* http://backend:3000
+
+# Requests for Text, JSON, or Patches go to the backend:
+@backend_accepted {
+	header_regexp Accept (?i)(text/(plain|markdown)|json|message/http-patches)
+}
+@backend_content_type {
+	header_regexp Content-Type (?i)(text/(plain|markdown)|json|message/http-patches)
+}
+reverse_proxy @backend_accepted http://backend:3000
+reverse_proxy @backend_content_type http://backend:3000
+
+# All the remaining HTML, CSS, JS and Images go to the Frontend:
 reverse_proxy /* http://frontend:3001

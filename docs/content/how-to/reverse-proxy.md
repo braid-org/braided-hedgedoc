@@ -31,7 +31,7 @@ in your `docker-compose.yml`:
         - hedgedoc_uploads:/usr/src/app/backend/uploads
       labels:
         traefik.enable: "true"
-        traefik.http.routers.hedgedoc_2_backend.rule: "Host(`md.example.com`) && (PathPrefix(`/realtime`) || PathPrefix(`/api`) || PathPrefix(`/public`) || PathPrefix(`/uploads`) || PathPrefix(`/media`))"
+        traefik.http.routers.hedgedoc_2_backend.rule: "Host(`md.example.com`) && (PathPrefix(`/realtime`) || PathPrefix(`/api`) || PathPrefix(`/public`) || PathPrefix(`/uploads`) || PathPrefix(`/media`) || HeadersRegexp(`Accept`, `text/(plain|markdown)|json|message/http-patches`) || HeadersRegexp(`Content-Type`, `text/(plain|markdown)|json|message/http-patches`))"
         traefik.http.routers.hedgedoc_2_backend.tls: "true"
         traefik.http.routers.hedgedoc_2_backend.tls.certresolver: "letsencrypt"
         traefik.http.services.hedgedoc_2_backend.loadbalancer.server.port: "3000"
@@ -110,17 +110,21 @@ Here is an example configuration for [nginx][nginx].
             default upgrade;
             ''      close;
     }
+
+    # Requests for Text, JSON, or Patches go to the backend:
+    map $http_accept $accept_backend {
+            default  0;
+            "~*text/(plain|markdown)|json|message/http-patches"  1;
+    }
+    map $http_content_type $content_type_backend {
+            default  0;
+            "~*text/(plain|markdown)|json|message/http-patches"  1;
+    }
+
     server {
             server_name md.example.com;
 
-            location ~ ^/(api|public|uploads|media)/ {
-                    proxy_pass http://127.0.0.1:3000;
-                    proxy_set_header X-Forwarded-Host $host;
-                    proxy_set_header X-Real-IP $remote_addr;
-                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto $scheme;
-            }
-
+            # WebSockets go to the backend:
             location /realtime {
                     proxy_pass http://127.0.0.1:3000;
                     proxy_set_header X-Forwarded-Host $host;
@@ -130,15 +134,32 @@ Here is an example configuration for [nginx][nginx].
                     proxy_set_header Upgrade $http_upgrade;
                     proxy_set_header Connection $connection_upgrade;
             }
-    
-            location / {
-                    proxy_pass http://127.0.0.1:3001;
-                    proxy_set_header X-Forwarded-Host $host; 
-                    proxy_set_header X-Real-IP $remote_addr; 
-                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; 
+
+            # API requests all go to the backend:
+            location ~ ^/(api|public|uploads|media)/ {
+                    proxy_pass http://127.0.0.1:3000;
+                    proxy_set_header X-Forwarded-Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
                     proxy_set_header X-Forwarded-Proto $scheme;
             }
-    
+
+            # All the remaining HTML, CSS, JS and Images go to the Frontend:
+            location / {
+                    set $target http://127.0.0.1:3001;
+                    if ($accept_backend) {
+                            set $target http://127.0.0.1:3000;
+                    }
+                    if ($content_type_backend) {
+                            set $target http://127.0.0.1:3000;
+                    }
+                    proxy_pass $target;
+                    proxy_set_header X-Forwarded-Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+            }
+
         listen [::]:443 ssl http2;
         listen 443 ssl http2;
         ssl_certificate fullchain.pem;
@@ -162,29 +183,39 @@ Here is an example config snippet for [Apache][apache]:
     <VirtualHost *:443>
       ServerName md.example.com
 
+      # WebSockets go to the backend:
       RewriteEngine on
       RewriteCond %{REQUEST_URI} ^/realtime             [NC]
       RewriteCond %{HTTP:Upgrade} =websocket             [NC]
       RewriteRule /(.*)  ws://127.0.0.1:3000/$1          [P,L]
-    
-      ProxyPass /api http://127.0.0.1:3000/
-      ProxyPass /public http://127.0.0.1:3000/
-      ProxyPass /realtime http://127.0.0.1:3000/
-      
-      ProxyPassReverse /api http://127.0.0.1:3000/
-      ProxyPassReverse /public http://127.0.0.1:3000/
-      ProxyPassReverse /uploads http://127.0.0.1:3000/
-      ProxyPassReverse /media http://127.0.0.1:3000/
-      ProxyPassReverse /realtime http://127.0.0.1:3000/
-      
+
+      # API requests all go to the backend:
+      ProxyPass /api/ http://127.0.0.1:3000/api/
+      ProxyPass /public/ http://127.0.0.1:3000/public/
+      ProxyPass /uploads/ http://127.0.0.1:3000/uploads/
+      ProxyPass /media/ http://127.0.0.1:3000/media/
+      ProxyPass /realtime http://127.0.0.1:3000/realtime
+
+      ProxyPassReverse /api/ http://127.0.0.1:3000/api/
+      ProxyPassReverse /public/ http://127.0.0.1:3000/public/
+      ProxyPassReverse /uploads/ http://127.0.0.1:3000/uploads/
+      ProxyPassReverse /media/ http://127.0.0.1:3000/media/
+      ProxyPassReverse /realtime http://127.0.0.1:3000/realtime
+
+      # Requests for Text, JSON, or Patches go to the backend:
+      RewriteCond %{HTTP:Accept} text/(plain|markdown)|json|message/http-patches [NC,OR]
+      RewriteCond %{HTTP:Content-Type} text/(plain|markdown)|json|message/http-patches [NC]
+      RewriteRule ^(.*)$ http://127.0.0.1:3000$1 [P,L]
+
+      # All the remaining HTML, CSS, JS and Images go to the Frontend:
       ProxyPass / http://127.0.0.1:3001/
       ProxyPassReverse / http://127.0.0.1:3001/
-    
+
       RequestHeader set "X-Forwarded-Proto" expr=%{REQUEST_SCHEME}
-            
+
       ErrorLog ${APACHE_LOG_DIR}/error.log
       CustomLog ${APACHE_LOG_DIR}/access.log combined
-    
+
       SSLCertificateFile /etc/letsencrypt/live/md.example.com/fullchain.pem
       SSLCertificateKeyFile /etc/letsencrypt/live/md.example.com/privkey.pem
       Include /etc/letsencrypt/options-ssl-apache.conf
@@ -203,11 +234,12 @@ Here is a list of things your reverse proxy needs to do to let HedgeDoc work:
 - Passing `/public/*` to <http://localhost:3000>
 - Passing `/uploads/*` to <http://localhost:3000>
 - Passing `/media/*` to <http://localhost:3000>
+- Passing requests with `Accept` or `Content-Type` containing `text/plain`, `text/markdown`, `json`, or `message/http-patches` to <http://localhost:3000>
 - Passing `/*` to <http://localhost:3001>
 - Set the `X-Forwarded-Proto` header 
 
-In essence there are a few special urls that need to be handled by the HedgeDoc backend
-and everything else is handled by the frontend.
+In essence, the backend handles all requests for text, JSON, and WebSockets;
+and the frontend handles HTML, CSS, JS, images.
 
 <!-- markdownlint-enable proper-names -->
 

@@ -175,6 +175,21 @@ export async function setupApp(
         { http_server: braidify } = await import('braid-http')
   // Then we detach each listener temporarily...
   server.removeAllListeners('request');
+
+  // Now we rewrite all /n/:alias routes with /api/v2/notes/:alias/content.
+  //
+  // These are the same resource -- just different names.
+  //   - /n/:alias                     is the public name for a note
+  //   - /api/v2/notes/:alias/content  is the api's name for the note
+  //
+  // It would be cleaner to just have nest route both of these to the same
+  // place, but it doesn't look like nest supports that type of routing, so
+  // we're adding a URL rewrite here, for now.
+  server.on('request', (req: { url?: string }) => {
+    const match = req.url?.match(/^\/n\/([^/?]+)(.*)$/);
+    if (match) req.url = `/api/v2/notes/${match[1]}/content${match[2]}`;
+  });
+
   for (const listener of listeners)
     // ...and replace it with a braidified wrapper of itself.
     server.on('request', braidify(listener as (...args: any[]) => void));
