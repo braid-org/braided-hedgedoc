@@ -223,27 +223,26 @@ export class NotesController {
     @Res() res: FastifyReply,
     @RequestNoteId() noteId: number,
   ): Promise<void> {
-    const contentType = (req.raw.headers['content-type'] || '') as string;
+    const type = (req.raw.headers['repr-type'] || '') as string;
 
     // All PUTs currently go to Braid-Text.
 
     // To stay sane, let's constrain the types of mutations we allow
     {
 
-      // First, verify client is PUTting text/plain, markdown, or patches
-      if (!(contentType.includes('text/plain')
-            || contentType.includes('text/markdown')
-            || contentType.includes('application/text-cursors+json')
-            || 'patches' in req.raw.headers)) {
-        res.status(415).send('Content must be text/plain, text/markdown,'
-                             + ' or have Patches: N');
+      // First, verify client is PUTting text/plain, markdown, or cursors
+      if (!(type.includes('text/plain')
+            || type.includes('text/markdown')
+            || type.includes('application/text-cursors+json'))) {
+        res.status(415).send('Repr-Type must be text/plain, text/markdown,'
+                             + ' or application/text-cursors+json');
         return;
       }
 
       // Second, only accept text edits from clients that know their version
       if ((!('version' in req.raw.headers) || !('parents' in req.raw.headers))
           // But cursor updates don't need version or parents.
-          && !contentType.includes('application/text-cursors+json')) {
+          && !type.includes('application/text-cursors+json')) {
         res.status(400).send('Missing Version and/or Parents headers');
         return;
       }

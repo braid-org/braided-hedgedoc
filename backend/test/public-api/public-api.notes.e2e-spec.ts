@@ -1094,13 +1094,15 @@ describe('Notes', () => {
     });
 
     it('braid PUT stores content and braid GET retrieves it', async () => {
-      // PUT content via braid
+      // PUT content via braid. 'Hello from braid' is 16 chars, so the
+      // last seq in the version must be 15 (count - 1).
       await agent
         .put(`${PUBLIC_API_PREFIX}/notes/${noteAlias1}/content`)
         .set('Authorization', `Bearer ${testSetup.authTokens[0].secret}`)
-        .set('Version', '"braid-test-1"')
+        .set('Version', '"braid-test-15"')
         .set('Parents', '')
         .set('Content-Type', 'text/plain')
+        .set('Repr-Type', 'text/plain')
         .send('Hello from braid')
         .expect(200);
 
@@ -1119,6 +1121,7 @@ describe('Notes', () => {
         .put(`${PUBLIC_API_PREFIX}/notes/${noteAlias1}/content`)
         .set('Authorization', `Bearer ${testSetup.authTokens[0].secret}`)
         .set('Content-Type', 'text/plain')
+        .set('Repr-Type', 'text/plain')
         .send('no version')
         .expect(400);
     });
@@ -1177,6 +1180,7 @@ describe('Notes', () => {
         .put(`${PUBLIC_API_PREFIX}/notes/${noteAlias1}/content`)
         .set('Authorization', `Bearer ${testSetup.authTokens[0].secret}`)
         .set('Content-Type', 'application/text-cursors+json')
+        .set('Repr-Type', 'application/text-cursors+json')
         .set('Peer', 'test-peer')
         .set('Content-Range', 'json ["test-peer"]')
         .send('[[0, 3]]')

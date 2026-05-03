@@ -1,1 +1,0 @@
-../../node_modules/braid-text/client/simpleton-sync.js

@@ -70,7 +70,9 @@ export async function setupApp(
 
   // Register content-type parsers for braid request types.
   // These capture raw bytes so braid-text can parse them itself.
-  for (const type of ['message/http-patches', 'application/text-cursors+json']) {
+  // The `/\/http-patches/` regex matches both `application/http-patches`
+  // (current) and `message/http-patches` (older clients).
+  for (const type of [/\/http-patches/, 'application/text-cursors+json']) {
     app
       .getHttpAdapter()
       .getInstance()
@@ -115,8 +117,13 @@ export async function setupApp(
       // similar to how WebSocket messages aren't rate-limited.
       if (req.method === 'PUT'
           && unlimitedEditors.has(generateRateLimitKey(req))) {
-        const type = req.headers['content-type'] || '';
-        if (type.includes('text/plain') || type.includes('text/markdown')
+
+        // We allow any PUTs to text or cursor state
+        var type = (req.headers['repr-type'] || '') as string;
+        // Repr-Type is a new header that tells you the type of the selected
+        // representation
+        if (type.includes('text/plain')
+            || type.includes('text/markdown')
             || type.includes('application/text-cursors+json'))
           return true;
       }
@@ -169,12 +176,8 @@ export async function setupApp(
   //
   // To do that, we grab the HTTP server...
   const server = app.getHttpAdapter().getInstance().server,
-        // ...remember each of its listeners
-        listeners = server.listeners('request'),
         // ...and get our braidifier ready.
         { http_server: braidify } = await import('braid-http')
-  // Then we detach each listener temporarily...
-  server.removeAllListeners('request');
 
   // Now we rewrite all /n/:alias routes with /api/v2/notes/:alias/content.
   //
@@ -185,15 +188,14 @@ export async function setupApp(
   // It would be cleaner to just have nest route both of these to the same
   // place, but it doesn't look like nest supports that type of routing, so
   // we're adding a URL rewrite here, for now.
-  server.on('request', (req: { url?: string }) => {
+  server.prependListener('request', (req: { url?: string }) => {
     const match = req.url?.match(/^\/n\/([^/?]+)(.*)$/);
     if (match) req.url = `/api/v2/notes/${match[1]}/content${match[2]}`;
   });
 
-  for (const listener of listeners)
-    // ...and replace it with a braidified wrapper of itself.
-    server.on('request', braidify(listener as (...args: any[]) => void));
-  // Now we're braidified!
+  // ...and braidify the server, which wraps each existing request listener
+  // with braid extensions.
+  braidify(server);
 
   // Configure WebSocket and error message handling
   const { httpAdapter } = app.get(HttpAdapterHost);

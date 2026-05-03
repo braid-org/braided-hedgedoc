@@ -1,1 +1,0 @@
-textarea-highlights.js
