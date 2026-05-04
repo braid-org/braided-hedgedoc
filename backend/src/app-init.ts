@@ -169,22 +169,20 @@ export async function setupApp(
   // TODO Evaluate whether we really need this folder,
   //  only use-cases for now are intro.md and motd.md which could be API endpoints as well
 
-  // == Install the Braid HTTP extensions at the root of Fastify ==
-  //
-  // The Braid HTTP extensions upgrade the fundamentals of HTTP, and need to
-  // be installed at the root of HTTP request handling.
-  //
-  // To do that, we grab the HTTP server...
+  // Grab the HTTP server.  We want to give it Braid-HTTP support
   const server = app.getHttpAdapter().getInstance().server,
-        // ...and get our braidifier ready.
+        // Get our braidifier ready
         { http_server: braidify } = await import('braid-http')
 
-  // Now we rewrite all /n/:alias routes with /api/v2/notes/:alias/content.
+  // We want Braid-HTTP clients to be able to edit notes via their user-facing
+  // URLs (formatted as /n/:alias), even though hedgedoc's backend
+  // sees them as /api/v2/notes/:alias/content.
   //
-  // These are the same resource -- just different names.
-  //   - /n/:alias                     is the public name for a note
-  //   - /api/v2/notes/:alias/content  is the api's name for the note
+  // So we have two names for the same resource:
+  //   - /n/:alias                     the public name for a note
+  //   - /api/v2/notes/:alias/content  the api's name for the note
   //
+  // 
   // It would be cleaner to just have nest route both of these to the same
   // place, but it doesn't look like nest supports that type of routing, so
   // we're adding a URL rewrite here, for now.
@@ -193,8 +191,8 @@ export async function setupApp(
     if (match) req.url = `/api/v2/notes/${match[1]}/content${match[2]}`;
   });
 
-  // ...and braidify the server, which wraps each existing request listener
-  // with braid extensions.
+
+  // Extend the fastify web server with Braid-HTTP support
   braidify(server);
 
   // Configure WebSocket and error message handling

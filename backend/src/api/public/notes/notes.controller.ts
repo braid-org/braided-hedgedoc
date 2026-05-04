@@ -194,8 +194,9 @@ export class NotesController {
     // This proof-of-concept stores text *both* in HedgeDoc's existing Note
     // Service, *and* in the Braid-Text db.
 
-    // We dispatch to Braid-Text iff the client is doing something Braidly:
-    // braid protocol headers, or requesting cursor data.
+    // We dispatch to Braid-Text iff the request is doing something Braidly:
+    //  - using braid-http headers
+    //  - or asking for cursor state
     const h = req.raw.headers;
     const accept = (h['accept'] || '') as string;
     if ('version' in h || 'parents' in h
