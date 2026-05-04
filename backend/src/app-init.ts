@@ -174,6 +174,9 @@ export async function setupApp(
         // Get our braidifier ready
         { http_server: braidify } = await import('braid-http')
 
+  // Extend the fastify web server with Braid-HTTP support
+  braidify(server);
+
   // Hedgedoc uses two names for the same note reosurce:
   //
   //   - /n/:alias                     the public name for a note
@@ -190,10 +193,6 @@ export async function setupApp(
     const match = req.url?.match(/^\/n\/([^/?]+)(.*)$/);
     if (match) req.url = `/api/v2/notes/${match[1]}/content${match[2]}`;
   });
-
-
-  // Extend the fastify web server with Braid-HTTP support
-  braidify(server);
 
   // Configure WebSocket and error message handling
   const { httpAdapter } = app.get(HttpAdapterHost);
