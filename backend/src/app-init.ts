@@ -174,18 +174,18 @@ export async function setupApp(
         // Get our braidifier ready
         { http_server: braidify } = await import('braid-http')
 
-  // We want Braid-HTTP clients to be able to edit notes via their user-facing
-  // URLs (formatted as /n/:alias), even though hedgedoc's backend
-  // sees them as /api/v2/notes/:alias/content.
+  // Hedgedoc uses two names for the same note reosurce:
   //
-  // So we have two names for the same resource:
   //   - /n/:alias                     the public name for a note
   //   - /api/v2/notes/:alias/content  the api's name for the note
   //
+  // We want Braid-HTTP clients to support these user-facing URLs (formatted
+  // as /n/:alias), even though hedgedoc's backend only sees the
+  // /api/v2/notes/:alias/content URLs.
   // 
-  // It would be cleaner to just have nest route both of these to the same
-  // place, but it doesn't look like nest supports that type of routing, so
-  // we're adding a URL rewrite here, for now.
+  // So we add support here for the /n/:alias URLs to the backend.  Nest
+  // doesn't seem to support that type of routing directly, so we implement a
+  // simple URL rewrite here, for now.
   server.prependListener('request', (req: { url?: string }) => {
     const match = req.url?.match(/^\/n\/([^/?]+)(.*)$/);
     if (match) req.url = `/api/v2/notes/${match[1]}/content${match[2]}`;
